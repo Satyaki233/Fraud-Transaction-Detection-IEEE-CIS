@@ -55,11 +55,11 @@ In Catalog Explorer, open `ml.fraud_model` → version 1 → **add alias** `cham
 Make a copy of `02_train`. Use a **random** split (`train_test_split(..., random_state=0)`) instead of the time split, train, and compute AUPRC on the random holdout. Don't register this model. Compare the score with your time-split AUPRC: the random split usually looks better, and that difference is leakage. It makes a good interview story.
 
 ## Done when
-- [ ] v1 has the tags `threshold` and `auprc`
-- [ ] `gold.model_metrics` has a row for v1
-- [ ] `gold.validation_predictions` is filled
-- [ ] v1 has the alias `@champion`
-- [ ] You can say in one sentence: "Of N frauds in the hidden weeks, the model caught X; Y of its Z flags were false alarms."
+- [x] v1 has the tags `threshold` and `auprc`
+- [x] `gold.model_metrics` has a row for v1
+- [x] `gold.validation_predictions` is filled
+- [x] v1 has the alias `@champion`
+- [x] You can say in one sentence: "Of N frauds in the hidden weeks, the model caught X; Y of its Z flags were false alarms."
 
 ## Check yourself
 - Your AUPRC is 0.45. Is that good? Compared to what?

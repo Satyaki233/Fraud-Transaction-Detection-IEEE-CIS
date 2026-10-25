@@ -41,8 +41,8 @@ GROUP BY flagged;
 Is the flagged percentage similar to what you saw on the validation set? If it's very different, the test period may behave differently from the training period (*drift*). That's a real-world finding worth noting.
 
 ## Done when
-- [ ] `gold.predictions` has 506,691 rows, all with `model_version` filled in
-- [ ] The submission CSV exists (and, optionally, has a Kaggle score)
+- [x] `gold.predictions` has 506,691 rows, all with `model_version` filled in
+- [x] The submission CSV exists (and, optionally, has a Kaggle score)
 
 ## Check yourself
 - Why look up the champion by alias, but then load it by version number?
