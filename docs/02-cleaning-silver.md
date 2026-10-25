@@ -76,8 +76,8 @@ It only looks at *earlier* rows, which is why it doesn't leak. A sudden burst of
   ```
 
 ## Done when
-- [ ] `silver.train` and `silver.test` exist, and the graph is green
-- [ ] Fraud rate ≈ 3.5%
+- [x] `silver.train` and `silver.test` exist, and the graph is green
+- [x] Fraud rate ≈ 3.5%
 - [ ] `silver.test` has every test transaction (506,691)
 - [ ] You know how many rows each expectation dropped
 

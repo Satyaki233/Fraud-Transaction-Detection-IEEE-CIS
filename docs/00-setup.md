@@ -61,9 +61,9 @@ Why separate folders? Auto Loader (Chapter 1) reads *every* file in a folder. On
 Commit `00_setup` from the Git folder and push it.
 
 ## Done when
-- [ ] The 4 schemas and the volume are visible in Catalog Explorer
-- [ ] Each folder holds exactly one CSV
-- [ ] `00_setup` is on GitHub
+- [x] The 4 schemas and the volume are visible in Catalog Explorer
+- [x] Each folder holds exactly one CSV
+- [x] `00_setup` is on GitHub
 
 ## Check yourself
 - What is the volume's full UC name, and what is its file path?
