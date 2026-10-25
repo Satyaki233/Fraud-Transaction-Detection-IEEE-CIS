@@ -1,0 +1,42 @@
+resources:
+  pipelines:
+    fraud_pipeline:
+      name: tnx_data_ingestion
+      serverless: true
+      catalog: ${var.catalog}
+      schema: bronze
+      libraries:
+        - notebook:
+            path: ../notebooks/01_pipeline.ipynb
+
+  jobs:
+    fraud_e2e:
+      name: fraud_e2e
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+      tasks:
+        - task_key: ingest_clean
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.fraud_pipeline.id}
+
+        - task_key: train
+          depends_on:
+            - task_key: ingest_clean
+          notebook_task:
+            notebook_path: ../notebooks/02_train.ipynb
+
+        - task_key: evaluate
+          depends_on:
+            - task_key: train
+          notebook_task:
+            notebook_path: ../notebooks/03_evaluate.ipynb
+
+        - task_key: score
+          depends_on:
+            - task_key: evaluate
+          notebook_task:
+            notebook_path: ../notebooks/04_score.ipynb

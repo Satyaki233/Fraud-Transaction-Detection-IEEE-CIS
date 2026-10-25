@@ -1,0 +1,17 @@
+bundle:
+  name: fraud_detection
+
+include:
+  - resources/*.yml
+
+
+variables:
+  catalog: 
+    default: ieee_cis
+
+
+target:
+  dev:
+    mode : development
+    default: true
+    workspace: https://dbc-994a50ce-2859.cloud.databricks.com/
