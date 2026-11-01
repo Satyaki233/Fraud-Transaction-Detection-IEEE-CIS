@@ -1,0 +1,1458 @@
+{
+  "datasets": [
+    {
+      "name": "overview",
+      "displayName": "Training data overview",
+      "queryLines": [
+        "SELECT COUNT(*) AS transactions,\n",
+        "       SUM(isFraud) AS frauds,\n",
+        "       ROUND(100 * AVG(isFraud), 2) AS fraud_rate_pct\n",
+        "FROM silver.train\n"
+      ]
+    },
+    {
+      "name": "by_product",
+      "displayName": "Fraud rate by product",
+      "queryLines": [
+        "SELECT ProductCD,\n",
+        "       COUNT(*) AS transactions,\n",
+        "       ROUND(100 * AVG(isFraud), 2) AS fraud_rate_pct\n",
+        "FROM silver.train\n",
+        "GROUP BY ProductCD\n"
+      ]
+    },
+    {
+      "name": "by_card",
+      "displayName": "Fraud rate by card type",
+      "queryLines": [
+        "SELECT CONCAT_WS(' ', COALESCE(card4, 'unknown'), COALESCE(card6, 'unknown')) AS card_type,\n",
+        "       COUNT(*) AS transactions,\n",
+        "       ROUND(100 * AVG(isFraud), 2) AS fraud_rate_pct\n",
+        "FROM silver.train\n",
+        "GROUP BY 1\n",
+        "HAVING COUNT(*) >= 1000\n"
+      ]
+    },
+    {
+      "name": "by_email",
+      "displayName": "Fraud rate by email domain",
+      "queryLines": [
+        "SELECT COALESCE(P_emaildomain, '(none)') AS email_domain,\n",
+        "       COUNT(*) AS transactions,\n",
+        "       ROUND(100 * AVG(isFraud), 2) AS fraud_rate_pct\n",
+        "FROM silver.train\n",
+        "GROUP BY 1\n",
+        "HAVING COUNT(*) >= 1000\n"
+      ]
+    },
+    {
+      "name": "by_hour",
+      "displayName": "Fraud rate by hour of day",
+      "queryLines": [
+        "SELECT hour,\n",
+        "       COUNT(*) AS transactions,\n",
+        "       ROUND(100 * AVG(isFraud), 2) AS fraud_rate_pct\n",
+        "FROM silver.train\n",
+        "GROUP BY hour\n"
+      ]
+    },
+    {
+      "name": "amount_dist",
+      "displayName": "Amount distribution, fraud vs legit",
+      "queryLines": [
+        "-- share of each class per amount band, so the rare fraud class is comparable to legit\n",
+        "SELECT CASE WHEN isFraud = 1 THEN 'Fraud' ELSE 'Legit' END AS class,\n",
+        "       band_from,\n",
+        "       ROUND(100 * COUNT(*) / SUM(COUNT(*)) OVER (PARTITION BY isFraud), 2) AS pct_of_class\n",
+        "FROM (\n",
+        "  SELECT isFraud,\n",
+        "         CASE WHEN TransactionAmt < 25 THEN 0\n",
+        "              WHEN TransactionAmt < 50 THEN 25\n",
+        "              WHEN TransactionAmt < 100 THEN 50\n",
+        "              WHEN TransactionAmt < 200 THEN 100\n",
+        "              WHEN TransactionAmt < 500 THEN 200\n",
+        "              ELSE 500 END AS band_from\n",
+        "  FROM silver.train\n",
+        ")\n",
+        "GROUP BY isFraud, band_from\n"
+      ]
+    },
+    {
+      "name": "live_metrics",
+      "displayName": "Live model metrics",
+      "queryLines": [
+        "-- the live model is the one 04_score used for gold.predictions\n",
+        "SELECT version,\n",
+        "       ROUND(auprc, 3) AS auprc,\n",
+        "       ROUND(100 * precision, 1) AS precision_pct,\n",
+        "       ROUND(100 * recall, 1) AS recall_pct,\n",
+        "       caught, missed, false_alarms\n",
+        "FROM gold.model_metrics\n",
+        "WHERE version = (SELECT MAX(model_version) FROM gold.predictions)\n"
+      ]
+    },
+    {
+      "name": "versions",
+      "displayName": "Metrics by model version",
+      "queryLines": [
+        "SELECT version, ROUND(auprc, 3) AS auprc\n",
+        "FROM gold.model_metrics\n"
+      ]
+    },
+    {
+      "name": "score_dist",
+      "displayName": "Score distribution, fraud vs legit",
+      "queryLines": [
+        "SELECT CASE WHEN actual = 1 THEN 'Fraud' ELSE 'Legit' END AS class,\n",
+        "       LEAST(FLOOR(fraud_score * 20), 19) / 20 AS score_from,\n",
+        "       ROUND(100 * COUNT(*) / SUM(COUNT(*)) OVER (PARTITION BY actual), 2) AS pct_of_class\n",
+        "FROM gold.validation_predictions\n",
+        "GROUP BY actual, score_from\n"
+      ]
+    },
+    {
+      "name": "pred_summary",
+      "displayName": "Test-set scoring summary",
+      "queryLines": [
+        "SELECT MAX(model_version) AS model_version,\n",
+        "       COUNT(*) AS scored,\n",
+        "       SUM(flagged) AS flagged,\n",
+        "       ROUND(100 * AVG(flagged), 2) AS flagged_pct\n",
+        "FROM gold.predictions\n"
+      ]
+    },
+    {
+      "name": "flagged_daily",
+      "displayName": "Flagged per day",
+      "queryLines": [
+        "SELECT DATE(event_ts) AS day,\n",
+        "       COUNT(*) AS transactions,\n",
+        "       SUM(flagged) AS flagged\n",
+        "FROM gold.predictions\n",
+        "GROUP BY 1\n"
+      ]
+    },
+    {
+      "name": "top_risky",
+      "displayName": "Top 50 riskiest transactions",
+      "queryLines": [
+        "SELECT TransactionID,\n",
+        "       event_ts,\n",
+        "       ROUND(TransactionAmt, 2) AS amount,\n",
+        "       ROUND(fraud_score, 4) AS fraud_score\n",
+        "FROM gold.predictions\n",
+        "ORDER BY fraud_score DESC\n",
+        "LIMIT 50\n"
+      ]
+    },
+    {
+      "name": "layer_counts",
+      "displayName": "Rows per layer",
+      "queryLines": [
+        "SELECT '1 bronze.train_transaction' AS table_name, COUNT(*) AS row_count FROM bronze.train_transaction\n",
+        "UNION ALL SELECT '2 silver.train', COUNT(*) FROM silver.train\n",
+        "UNION ALL SELECT '3 bronze.test_transaction', COUNT(*) FROM bronze.test_transaction\n",
+        "UNION ALL SELECT '4 silver.test', COUNT(*) FROM silver.test\n",
+        "UNION ALL SELECT '5 gold.predictions', COUNT(*) FROM gold.predictions\n"
+      ]
+    },
+    {
+      "name": "quality",
+      "displayName": "Rows lost between layers",
+      "queryLines": [
+        "SELECT (SELECT COUNT(*) FROM bronze.train_transaction) - (SELECT COUNT(*) FROM silver.train) AS train_dropped,\n",
+        "       (SELECT COUNT(*) FROM silver.test) - (SELECT COUNT(*) FROM gold.predictions) AS test_not_scored\n"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "problem",
+      "displayName": "1. The problem",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_problem",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## The problem\nAbout 3.5% of card transactions are fraud. Where does it concentrate?"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_txns",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "overview",
+                  "fields": [
+                    {
+                      "name": "transactions",
+                      "expression": "`transactions`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "transactions",
+                  "displayName": "Training transactions"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Training transactions"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_frauds",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "overview",
+                  "fields": [
+                    {
+                      "name": "frauds",
+                      "expression": "`frauds`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "frauds",
+                  "displayName": "Frauds"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Frauds"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_rate",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "overview",
+                  "fields": [
+                    {
+                      "name": "fraud_rate_pct",
+                      "expression": "`fraud_rate_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "fraud_rate_pct",
+                  "displayName": "Fraud rate (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fraud rate (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "b_product",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "by_product",
+                  "fields": [
+                    {
+                      "name": "ProductCD",
+                      "expression": "`ProductCD`"
+                    },
+                    {
+                      "name": "fraud_rate_pct",
+                      "expression": "`fraud_rate_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "ProductCD",
+                  "displayName": "Product",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "fraud_rate_pct",
+                  "displayName": "Fraud rate (%)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fraud rate by product"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "b_card",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "by_card",
+                  "fields": [
+                    {
+                      "name": "card_type",
+                      "expression": "`card_type`"
+                    },
+                    {
+                      "name": "fraud_rate_pct",
+                      "expression": "`fraud_rate_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "card_type",
+                  "displayName": "Card",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "fraud_rate_pct",
+                  "displayName": "Fraud rate (%)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fraud rate by card type",
+                "showDescription": true,
+                "description": "Card types with at least 1,000 transactions"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "b_email",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "by_email",
+                  "fields": [
+                    {
+                      "name": "email_domain",
+                      "expression": "`email_domain`"
+                    },
+                    {
+                      "name": "fraud_rate_pct",
+                      "expression": "`fraud_rate_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "email_domain",
+                  "displayName": "Purchaser email domain",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "fraud_rate_pct",
+                  "displayName": "Fraud rate (%)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fraud rate by email domain",
+                "showDescription": true,
+                "description": "Domains with at least 1,000 transactions"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "l_hour",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "by_hour",
+                  "fields": [
+                    {
+                      "name": "hour",
+                      "expression": "`hour`"
+                    },
+                    {
+                      "name": "fraud_rate_pct",
+                      "expression": "`fraud_rate_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "hour",
+                  "displayName": "Hour",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "fraud_rate_pct",
+                  "displayName": "Fraud rate (%)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fraud rate by hour of day"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "b_amount",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "amount_dist",
+                  "fields": [
+                    {
+                      "name": "band_from",
+                      "expression": "`band_from`"
+                    },
+                    {
+                      "name": "pct_of_class",
+                      "expression": "`pct_of_class`"
+                    },
+                    {
+                      "name": "class",
+                      "expression": "`class`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "band_from",
+                  "displayName": "Amount from ($)",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "natural-order"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "pct_of_class",
+                  "displayName": "% of class",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "class",
+                  "displayName": "Class",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Transaction amount, fraud vs legit"
+              },
+              "mark": {
+                "layout": "group"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 18,
+            "width": 3,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "model",
+      "displayName": "2. How good is the model?",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_model",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## How good is the model?\nScored on the last weeks of training data, which the model never saw. The counters show the live model (the one used for scoring)."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_auprc",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "live_metrics",
+                  "fields": [
+                    {
+                      "name": "auprc",
+                      "expression": "`auprc`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "auprc",
+                  "displayName": "AUPRC"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "AUPRC"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_precision",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "live_metrics",
+                  "fields": [
+                    {
+                      "name": "precision_pct",
+                      "expression": "`precision_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "precision_pct",
+                  "displayName": "Precision (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Precision (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_recall",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "live_metrics",
+                  "fields": [
+                    {
+                      "name": "recall_pct",
+                      "expression": "`recall_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "recall_pct",
+                  "displayName": "Recall (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Recall (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_caught",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "live_metrics",
+                  "fields": [
+                    {
+                      "name": "caught",
+                      "expression": "`caught`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "caught",
+                  "displayName": "Frauds caught"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Frauds caught"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_missed",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "live_metrics",
+                  "fields": [
+                    {
+                      "name": "missed",
+                      "expression": "`missed`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "missed",
+                  "displayName": "Frauds missed"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Frauds missed"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 5,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_false",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "live_metrics",
+                  "fields": [
+                    {
+                      "name": "false_alarms",
+                      "expression": "`false_alarms`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "false_alarms",
+                  "displayName": "False alarms"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "False alarms"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 5,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "b_versions",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "versions",
+                  "fields": [
+                    {
+                      "name": "version",
+                      "expression": "`version`"
+                    },
+                    {
+                      "name": "auprc",
+                      "expression": "`auprc`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "version",
+                  "displayName": "Model version",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "natural-order"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "auprc",
+                  "displayName": "AUPRC",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "AUPRC by model version"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "b_scores",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "score_dist",
+                  "fields": [
+                    {
+                      "name": "score_from",
+                      "expression": "`score_from`"
+                    },
+                    {
+                      "name": "pct_of_class",
+                      "expression": "`pct_of_class`"
+                    },
+                    {
+                      "name": "class",
+                      "expression": "`class`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "score_from",
+                  "displayName": "Fraud score from",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "natural-order"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "pct_of_class",
+                  "displayName": "% of class",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "class",
+                  "displayName": "Class",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Score distribution, fraud vs legit",
+                "showDescription": true,
+                "description": "Latest evaluated version"
+              },
+              "mark": {
+                "layout": "group"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 8,
+            "width": 3,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "action",
+      "displayName": "3. The model in action",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_action",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## The model in action\nThe live model scoring the Kaggle test set, which has no labels."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_version",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "pred_summary",
+                  "fields": [
+                    {
+                      "name": "model_version",
+                      "expression": "`model_version`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "model_version",
+                  "displayName": "Model version in use"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Model version in use"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_flagged",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "pred_summary",
+                  "fields": [
+                    {
+                      "name": "flagged",
+                      "expression": "`flagged`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "flagged",
+                  "displayName": "Flagged transactions"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Flagged transactions"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_flagged_pct",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "pred_summary",
+                  "fields": [
+                    {
+                      "name": "flagged_pct",
+                      "expression": "`flagged_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "flagged_pct",
+                  "displayName": "Flagged (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Flagged (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "l_daily",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "flagged_daily",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "flagged",
+                      "expression": "`flagged`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "displayName": "Day",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "flagged",
+                  "displayName": "Flagged",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Flagged per day"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "tb_top",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "top_risky",
+                  "fields": [
+                    {
+                      "name": "TransactionID",
+                      "expression": "`TransactionID`"
+                    },
+                    {
+                      "name": "event_ts",
+                      "expression": "`event_ts`"
+                    },
+                    {
+                      "name": "amount",
+                      "expression": "`amount`"
+                    },
+                    {
+                      "name": "fraud_score",
+                      "expression": "`fraud_score`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "TransactionID",
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "TransactionID",
+                    "displayName": "TransactionID",
+                    "numberFormat": "0"
+                  },
+                  {
+                    "fieldName": "event_ts",
+                    "type": "datetime",
+                    "displayAs": "datetime",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "event_ts",
+                    "displayName": "event_ts",
+                    "dateTimeFormat": "YYYY-MM-DD HH:mm"
+                  },
+                  {
+                    "fieldName": "amount",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100002,
+                    "title": "amount",
+                    "displayName": "amount",
+                    "numberFormat": "0.00"
+                  },
+                  {
+                    "fieldName": "fraud_score",
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 100003,
+                    "title": "fraud_score",
+                    "displayName": "fraud_score",
+                    "numberFormat": "0.0000"
+                  }
+                ]
+              },
+              "invisibleColumns": [],
+              "allowHTMLByDefault": false,
+              "itemsPerPage": 25,
+              "condensed": true,
+              "withRowNumber": true,
+              "frame": {
+                "showTitle": true,
+                "title": "Top 50 riskiest transactions"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 9
+          }
+        }
+      ]
+    },
+    {
+      "name": "pipeline",
+      "displayName": "4. Is the pipeline reliable?",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_pipeline",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Is the pipeline reliable?\nRow counts from Bronze to Gold. Train rows that break a quality rule are dropped; every test row must be scored."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "b_layers",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "layer_counts",
+                  "fields": [
+                    {
+                      "name": "table_name",
+                      "expression": "`table_name`"
+                    },
+                    {
+                      "name": "row_count",
+                      "expression": "`row_count`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "table_name",
+                  "displayName": "Table",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "natural-order"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "row_count",
+                  "displayName": "Rows",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Rows per layer"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 4,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "c_dropped",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "quality",
+                  "fields": [
+                    {
+                      "name": "train_dropped",
+                      "expression": "`train_dropped`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "train_dropped",
+                  "displayName": "Train rows dropped by quality rules"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Train rows dropped by quality rules"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_unscored",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "quality",
+                  "fields": [
+                    {
+                      "name": "test_not_scored",
+                      "expression": "`test_not_scored`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "test_not_scored",
+                  "displayName": "Test rows not scored"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Test rows not scored"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 5,
+            "width": 2,
+            "height": 3
+          }
+        }
+      ]
+    }
+  ]
+}

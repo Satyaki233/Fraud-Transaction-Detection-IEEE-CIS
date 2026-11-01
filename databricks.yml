@@ -6,12 +6,16 @@ include:
 
 
 variables:
-  catalog: 
+  catalog:
     default: ieee_cis
+  warehouse_id:
+    lookup:
+      warehouse: Serverless Starter Warehouse
 
 
-target:
+targets:
   dev:
-    mode : development
+    mode: development
     default: true
-    workspace: https://dbc-994a50ce-2859.cloud.databricks.com/
+    workspace:
+      host: https://dbc-994a50ce-2859.cloud.databricks.com
