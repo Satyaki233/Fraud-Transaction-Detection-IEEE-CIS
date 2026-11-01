@@ -40,3 +40,10 @@ resources:
             - task_key: evaluate
           notebook_task:
             notebook_path: ../notebooks/04_score.ipynb
+
+  dashboards:
+    fraud_dashboard:
+      display_name: "Fraud Detection: IEEE-CIS"
+      file_path: ../dashboard/fraud_detection.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
